@@ -147,8 +147,8 @@ jobs:
 
       - name: Update Helm Version to git tag
         run: |
-          sed -i -e "s/version: \"\"/version: \"${{ needs.tag-repo.outputs.newtag }}\"/g" charts/vpa-operator/Chart.yaml
-          sed -i -e "s/appVersion: \"\"/appVersion: \"${{ needs.tag-repo.outputs.newtag }}\"/g" charts/vpa-operator/Chart.yaml
+          sed -i -e "s/version: \"\"/version: \"${{ needs.tag-repo.outputs.newtag }}\"/g" charts/vpa-prometheus-exporter/Chart.yaml
+          sed -i -e "s/appVersion: \"\"/appVersion: \"${{ needs.tag-repo.outputs.newtag }}\"/g" charts/vpa-prometheus-exporter/Chart.yaml
 
       - name: Run chart-releaser
         uses: helm/chart-releaser-action@v1.7.0 # v1.5.0
@@ -159,5 +159,5 @@ jobs:
           CR_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
           CR_SKIP_EXISTING: true
           CR_OWNER: "${{ github.repository_owner }}"
-          CR_GIT_REPO: "vpa-operator"
+          CR_GIT_REPO: "vpa-prometheus-exporter"
 
