@@ -1,0 +1,14 @@
+{{- if .Values.metrics.serviceMonitor.enabled }}
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ include "vpa-prometheus-exporter.fullname" . }}
+spec:
+  endpoints:
+  - path: /metrics
+    port: http
+  selector:
+    matchLabels:
+       {{ include "vpa-prometheus-exporter.selectorLabels" . | nindent 6 }}
+{{- end }}
+

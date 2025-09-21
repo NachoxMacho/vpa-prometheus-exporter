@@ -130,13 +130,13 @@ func main() {
 
 	mux.Handle("/metrics", promhttp.Handler())
 
-	mux.HandleFunc("/readyz", func(w http.ResponseWriter, _ *http.Request) {
+	mux.HandleFunc("/ready", func(w http.ResponseWriter, _ *http.Request) {
 		_, span := StartTrace(context.TODO(), "readyz")
 		defer span.End()
 		w.WriteHeader(204)
 		span.SetStatus(codes.Ok, "completed call")
 	})
-	mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) {
+	mux.HandleFunc("/health", func(w http.ResponseWriter, _ *http.Request) {
 		_, span := StartTrace(context.TODO(), "healthz")
 		defer span.End()
 		w.WriteHeader(204)
