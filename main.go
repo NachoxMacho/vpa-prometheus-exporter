@@ -7,19 +7,14 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
-	"net/http/pprof"
 	"os"
 	"os/signal"
 	"path/filepath"
 	"syscall"
 	"time"
 
-	"go.opentelemetry.io/otel/codes"
-
 	"github.com/grafana/pyroscope-go"
-	pyroscope_pprof "github.com/grafana/pyroscope-go/http/pprof"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
-	"k8s.io/autoscaler/vertical-pod-autoscaler/pkg/client/clientset/versioned"
+	vpaClientset "k8s.io/autoscaler/vertical-pod-autoscaler/pkg/client/clientset/versioned"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/client-go/util/homedir"
@@ -50,10 +45,17 @@ func gracefulShutdown(apiServer *http.Server, done chan bool) {
 }
 
 func main() {
+	err := run()
+	if err != nil {
+		slog.Error("failed to run", slog.String("error", err.Error()))
+	}
+}
+
+func run() error {
 	pyroscopeAddr := os.Getenv("PYROSCOPE_ADDR")
 
 	pyro, err := pyroscope.Start(pyroscope.Config{
-		ApplicationName: "vpa-operator",
+		ApplicationName: "vpa-prometheus-exporter",
 		ServerAddress:   pyroscopeAddr,
 		ProfileTypes: []pyroscope.ProfileType{
 			pyroscope.ProfileCPU,
@@ -83,17 +85,56 @@ func main() {
 		ctx, shutdown, err := InitializeTracer(traceAddr)
 		if err != nil {
 			slog.Error("Failed to initialize tracer", slog.String("Error", err.Error()))
-			os.Exit(1)
+			return err
 		}
 		defer func() {
 			err := shutdown(ctx)
 			if err != nil {
 				slog.Error("Failed to shutdown tracer", slog.String("Error", err.Error()))
-				os.Exit(1)
 			}
 		}()
 	}
 
+	config, err := setupKubernetesConfig()
+	if err != nil {
+		return err
+	}
+
+	vpaClient, err := vpaClientset.NewForConfig(config)
+	if err != nil {
+		slog.Error("failed to build vpa client", slog.String("error", err.Error()))
+		os.Exit(1)
+	}
+
+	slog.Info("Scanning for changes")
+
+	// StartMetricRecording("VPARecommendations", recordVPARecommendations(vpaClient), time.Minute*1)
+	err = setupVPAWatcher(vpaClient)
+	if err != nil {
+		return  fmt.Errorf("failed to setup vpa watcher: %w", err)
+	}
+
+	server := NewServer()
+
+	// Create a done channel to signal when the shutdown is complete
+	done := make(chan bool, 1)
+
+	// Run graceful shutdown in a separate goroutine
+	go gracefulShutdown(server, done)
+
+	slog.Info("Server starting", slog.String("url", server.Addr))
+
+	err = server.ListenAndServe()
+	if err != nil && !errors.Is(err, http.ErrServerClosed) {
+		return fmt.Errorf("http server error: %s", err)
+	}
+
+	// Wait for the graceful shutdown to complete
+	<-done
+	return nil
+}
+
+func setupKubernetesConfig() (*rest.Config, error) {
 	config, err := rest.InClusterConfig()
 	if errors.Is(err, rest.ErrNotInCluster) {
 		var kubeconfig *string
@@ -108,60 +149,7 @@ func main() {
 
 	if err != nil {
 		slog.Error("failed to connect to kubernetes cluster", slog.String("error", err.Error()))
-		os.Exit(1)
+		return nil, err
 	}
-
-	vpaClient, err := versioned.NewForConfig(config)
-	if err != nil {
-		slog.Error("failed to build vpa client", slog.String("error", err.Error()))
-		os.Exit(1)
-	}
-
-	slog.Info("Scanning for changes")
-
-	StartMetricRecording("VPARecommendations", recordVPARecommendations(vpaClient), time.Minute*1)
-
-	mux := http.NewServeMux()
-	mux.HandleFunc("/debug/pprof", pprof.Index)
-	mux.HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
-	mux.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
-	mux.HandleFunc("/debug/pprof/trace", pprof.Trace)
-	mux.HandleFunc("/debug/pprof/profile", pyroscope_pprof.Profile)
-
-	mux.Handle("/metrics", promhttp.Handler())
-
-	mux.HandleFunc("/ready", func(w http.ResponseWriter, _ *http.Request) {
-		_, span := StartTrace(context.TODO(), "readyz")
-		defer span.End()
-		w.WriteHeader(204)
-		span.SetStatus(codes.Ok, "completed call")
-	})
-	mux.HandleFunc("/health", func(w http.ResponseWriter, _ *http.Request) {
-		_, span := StartTrace(context.TODO(), "healthz")
-		defer span.End()
-		w.WriteHeader(204)
-		span.SetStatus(codes.Ok, "completed call")
-	})
-
-	server := http.Server{
-		Addr:    ":8080",
-		Handler: mux,
-	}
-
-	// Create a done channel to signal when the shutdown is complete
-	done := make(chan bool, 1)
-
-	// Run graceful shutdown in a separate goroutine
-	go gracefulShutdown(&server, done)
-
-	slog.Info("Server starting", slog.String("url", server.Addr))
-
-	err = server.ListenAndServe()
-	if err != nil && !errors.Is(err, http.ErrServerClosed) {
-		panic(fmt.Sprintf("http server error: %s", err))
-	}
-
-	// Wait for the graceful shutdown to complete
-	<-done
-
+	return config, nil
 }
