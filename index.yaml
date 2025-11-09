@@ -2,6 +2,16 @@ apiVersion: v1
 entries:
   vpa-prometheus-exporter:
   - apiVersion: v2
+    appVersion: 2025.11.01
+    created: "2025-11-09T13:25:42.560103291Z"
+    description: A Helm chart for Kubernetes
+    digest: d58907c7aadaac20b23b131dc92b3550b2493f659c1bf503b75a42d001a495e9
+    name: vpa-prometheus-exporter
+    type: application
+    urls:
+    - https://github.com/NachoxMacho/vpa-prometheus-exporter/releases/download/vpa-prometheus-exporter-2025.11.01/vpa-prometheus-exporter-2025.11.01.tgz
+    version: 2025.11.01
+  - apiVersion: v2
     appVersion: 2025.09.05
     created: "2025-09-21T20:57:29.407735583Z"
     description: A Helm chart for Kubernetes
@@ -21,4 +31,4 @@ entries:
     urls:
     - https://github.com/NachoxMacho/vpa-prometheus-exporter/releases/download/vpa-prometheus-exporter-2025.09.04/vpa-prometheus-exporter-2025.09.04.tgz
     version: 2025.09.04
-generated: "2025-09-21T20:57:29.407746303Z"
+generated: "2025-11-09T13:25:42.560123328Z"
